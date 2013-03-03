@@ -62,6 +62,9 @@ alternate_ax_attributes = dict(
     web='http://schema.openid.net/contact/web/default',
 )
 
+sreg_attributes = ['nickname', 'email', 'fullname', 'dob', 'gender',
+                   'postcode', 'country', 'language', 'timezone']
+
 # Translation dict for AX attrib names to sreg equiv
 trans_dict = dict(
     full_name='fullname',
@@ -81,6 +84,8 @@ def includeme(config):
 
 
 def add_openid_login(config,
+                     attrs=None,
+                     oattrs=None,
                      realm=None,
                      storage=None,
                      login_path='/login/openid',
@@ -89,11 +94,12 @@ def add_openid_login(config,
     """
     Add a OpenID login provider to the application.
 
+    `attrs` and `oattrs` are required and optional OpenID attributes
     `storage` should be an object conforming to the
     `openid.store.interface.OpenIDStore` protocol. This will default
     to `openid.store.memstore.MemoryStore`.
     """
-    provider = OpenIDConsumer(name, realm=realm, storage=storage)
+    provider = OpenIDConsumer(name, attrs=attrs, oattrs=oattrs, realm=realm, storage=storage)
 
     config.add_route(provider.login_route, login_path)
     config.add_view(provider, attr='login', route_name=provider.login_route,
@@ -115,6 +121,8 @@ class OpenIDConsumer(object):
     def __init__(self,
                  name,
                  _type=None,
+                 attrs=None,
+                 oattrs=None,
                  realm=None,
                  storage=None,
                  context=AuthenticationComplete):
@@ -126,6 +134,8 @@ class OpenIDConsumer(object):
 
         self.login_route = 'velruse.%s-url' % name
         self.callback_route = 'velruse.%s-callback' % name
+        self.openid_attributes = attrs or attributes.values()
+        self.openid_optional_attributes = oattrs if oattrs is not None else sreg_attributes
 
     _openid_store = None
 
@@ -160,14 +170,14 @@ class OpenIDConsumer(object):
         """
         # Add on the Attribute Exchange for those that support that
         ax_request = ax.FetchRequest()
-        for attrib in attributes.values():
+        for attrib in self.openid_attributes:
             ax_request.add(ax.AttrInfo(attrib))
         authrequest.addExtension(ax_request)
 
         # Form the Simple Reg request
         sreg_request = sreg.SRegRequest(
-            optional=['nickname', 'email', 'fullname', 'dob', 'gender',
-                      'postcode', 'country', 'language', 'timezone'],
+            required=list(set(self.openid_attributes) & set(sreg_attributes)),
+            optional=list(set(self.openid_optional_attributes)) or None,
         )
         authrequest.addExtension(sreg_request)
 
